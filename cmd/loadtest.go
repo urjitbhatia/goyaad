@@ -29,17 +29,17 @@ var sizeBytes = 100
 
 func init() {
 
-	loadTestCmd.Flags().Int64VarP(&nsTolerance, "nsTolerance", "t", 1000, "Dequeued jobs time order tolerance in ns")
-	loadTestCmd.Flags().BoolVarP(&enableTolerance, "enableTolerance", "T", false, "Calculate time tolerance")
+	loadTestCmd.LocalFlags().Int64VarP(&nsTolerance, "nsTolerance", "t", 1000, "Dequeued jobs time order tolerance in ns")
+	loadTestCmd.LocalFlags().BoolVarP(&enableTolerance, "enableTolerance", "T", false, "Calculate time tolerance")
 
-	loadTestCmd.Flags().IntVarP(&sizeBytes, "size", "z", 1000, "Job size in bytes")
-	loadTestCmd.Flags().IntVarP(&jobs, "num", "n", 1000, "Number of total jobs")
-	loadTestCmd.Flags().IntVarP(&connections, "con", "c", 5, "Number of connections to use")
-	loadTestCmd.Flags().IntVarP(&maxDelaySec, "delayMax", "M", 60, "Max delay in seconds (Delay is random over delayMin, delayMax)")
-	loadTestCmd.Flags().IntVarP(&minDelaySec, "delayMin", "N", 0, "Min delay in seconds (Delay is random over delayMin, delayMax)")
+	loadTestCmd.LocalFlags().IntVarP(&sizeBytes, "size", "z", 1000, "Job size in bytes")
+	loadTestCmd.LocalFlags().IntVarP(&jobs, "num", "n", 1000, "Number of total jobs")
+	loadTestCmd.LocalFlags().IntVarP(&connections, "con", "c", 5, "Number of connections to use")
+	loadTestCmd.LocalFlags().IntVarP(&maxDelaySec, "delayMax", "M", 60, "Max delay in seconds (Delay is random over delayMin, delayMax)")
+	loadTestCmd.LocalFlags().IntVarP(&minDelaySec, "delayMin", "N", 0, "Min delay in seconds (Delay is random over delayMin, delayMax)")
 
-	loadTestCmd.Flags().BoolVarP(&enqueueMode, "enqueue", "e", false, "Enqueue jobs")
-	loadTestCmd.Flags().BoolVarP(&dequeueMode, "dequeueMode", "d", false, "Dequeue jobs")
+	loadTestCmd.LocalFlags().BoolVarP(&enqueueMode, "enqueue", "e", false, "Enqueue jobs")
+	loadTestCmd.LocalFlags().BoolVarP(&dequeueMode, "dequeueMode", "d", false, "Dequeue jobs")
 
 	rootCmd.AddCommand(loadTestCmd)
 }
