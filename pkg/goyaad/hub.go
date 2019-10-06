@@ -148,13 +148,13 @@ func (h *Hub) cancelJob(jobID string) error {
 	return err
 }
 
-// findOwnerSpoke returns the spoke that owns this job
+// findOwnerSpoke returns the spoke that owns this job. Lock the hub before calling this
 func (h *Hub) findOwnerSpoke(jobID string) (*Spoke, error) {
 	if h.pastSpoke.OwnsJobLocked(jobID) {
 		return h.pastSpoke, nil
 	}
 
-	// Checking the current spoke - lock the hub
+	// Checking the current spoke
 	if h.currentSpoke != nil && h.currentSpoke.OwnsJobLocked(jobID) {
 		return h.currentSpoke, nil
 	}
