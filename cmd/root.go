@@ -2,13 +2,11 @@
 package cmd
 
 import (
-	"io"
 	"net/http"
 	"os"
 	"os/signal"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -16,15 +14,17 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
+	"github.com/urjitbhatia/goyaad/internal/api/grpc"
+	"github.com/urjitbhatia/goyaad/internal/api/rpc"
 	"github.com/urjitbhatia/goyaad/pkg/goyaad"
 	"github.com/urjitbhatia/goyaad/pkg/metrics"
 	"github.com/urjitbhatia/goyaad/pkg/persistence"
-	"github.com/urjitbhatia/goyaad/pkg/protocol"
 )
 
 var logLevel = "INFO"
 var raddr = ":11301"
-var gaddr = ":9999"
+var gaddr = ":11302"
+var haddr = ":11303"
 var statsAddr = ":8125"
 var dataDir string
 var restore bool
@@ -35,8 +35,9 @@ func init() {
 	// Global persistent flags
 	rootCmd.PersistentFlags().StringVarP(&logLevel, "log-level", "l", "INFO", "Set log level: INFO, DEBUG")
 	rootCmd.PersistentFlags().BoolVarP(&friendlyLog, "friendly-log", "L", false, "Use a human-friendly logging style")
-	rootCmd.PersistentFlags().StringVar(&raddr, "raddr", raddr, "Set RPC server listen addr (host:port)")
-	rootCmd.PersistentFlags().StringVar(&gaddr, "gaddr", gaddr, "Set GRPC server listen addr (host:port)")
+	rootCmd.PersistentFlags().StringVar(&raddr, "raddr", raddr, "Set RPC listener addr (host:port)")
+	rootCmd.PersistentFlags().StringVar(&gaddr, "gaddr", gaddr, "Set GRPC listener addr (host:port)")
+	rootCmd.PersistentFlags().StringVar(&haddr, "haddr", haddr, "Set GRPC-JSON http proxy listener addr (host:port)")
 	rootCmd.PersistentFlags().StringVarP(&statsAddr, "statsAddr", "s", statsAddr, "Stats addr (host:port)")
 
 	rootCmd.Flags().StringVarP(&spokeSpan, "spokeSpan", "S", "10s", "Spoke span (golang duration string format)")
@@ -87,27 +88,47 @@ func runServer() {
 		MaxCFSize:      goyaad.DefaultMaxCFSize,
 	}
 
+	// Create a new hub
 	hub := goyaad.NewHub(opts)
-	var rpcSRV io.Closer
-	wg := sync.WaitGroup{}
-	go func() {
-		rpcSRV, _ = protocol.ServeRPC(hub, raddr)
-	}()
 
-	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, syscall.SIGUSR1)
+	// RPC listener
+	rpcSRV, err := rpc.ServeRPC(hub, raddr)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to start RPC Server")
+	}
 
-	wg.Add(1)
+	// GRPC listener
+	grpcSrv := grpc.NewGRPCServer(hub)
+	grpcCloser, err := grpcSrv.ServeGRPC(gaddr)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to start GRPC Server")
+	}
+	// GRPC-JSON HTTP listener
+	httpCloser, err := grpcSrv.ServeHTTP(haddr, gaddr)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to start GRPC-JSON HTTP Server")
+	}
+
+	sigc := make(chan os.Signal, 2)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGUSR1)
+
+	// wg for the various listeners
+	stopped := make(chan struct{})
 	go func() {
-		defer wg.Done()
+		defer close(stopped)
 		<-sigc
 		log.Info().Msg("Stopping rpc protocol server")
-		rpcSRV.Close()
-		log.Info().Msg("Stopping rpc protocol server - Done")
+		err = rpcSRV.Close()
+		log.Info().Err(err).Msg("Stopping rpc protocol server - Done")
+		log.Info().Msg("Stopping grpc protocol server")
+		err = grpcCloser.Close()
+		log.Info().Err(err).Msg("Stopping grpc protocol server - Done")
+		log.Info().Msg("Stopping grpc-json http proxy server")
+		err = httpCloser.Close()
+		log.Info().Err(err).Msg("Stopping grpc-json http proxy server - Done")
 		hub.Stop(true)
 	}()
-
-	wg.Wait()
+	<-stopped
 }
 
 // Execute root cmd by default
